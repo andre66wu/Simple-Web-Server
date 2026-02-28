@@ -27,22 +27,22 @@ int child_num = 0;
 #define MAX_CHILD 256
 int port = 80;
 
-void str2lower(char *str) {
+void str2lower(char *str)
+{
     if (str == NULL) return;
     for (char *p = str; *p; p++) {
         *p = tolower((unsigned char)*p);
     }
 }
 
-
-int dir_exist(const char* path) {
+int dir_exist(const char* path)
+{
     struct stat st;
-    if (stat(path, &st) == 0) {
-	if(S_ISDIR(st.st_mode)) return 1;
-    }
-    return -1;
+    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode))
+        return 1;
+    else
+        return 0;
 }
-
 
 void log_msg(const char *fmt, ...)
 {
@@ -59,7 +59,8 @@ void log_msg(const char *fmt, ...)
     va_end(ap);
 }
 
-void wait_child() {
+void wait_child()
+{
     pid_t pid = 0;
     while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
         --child_num;
@@ -70,11 +71,13 @@ void wait_child() {
 }
 
 // 信号处理函数：异步回收子进程资源
-void sigchld_handler(int sig) {
+void sigchld_handler(int sig)
+{
     sig_pending = 1;
 }
 
-void sigterm_handler(int sig) {
+void sigterm_handler(int sig)
+{
     log_msg("Received SIGTERM. Server %d is shutting down\n", getpid());
     exit(0);
 }
@@ -99,7 +102,7 @@ int recv_line(int sock_fd, char *buffer, int length, int timeout)
                 res = select(sock_fd + 1, &fds, NULL, NULL, &wait);
                 if (res < 0) {
                         if (errno == EINTR) continue;
-			perror("recv_line select");
+                        perror("recv_line select");
                         return -1;
                 } else if (res == 0) {
                         return (length - left);
@@ -113,16 +116,15 @@ int recv_line(int sock_fd, char *buffer, int length, int timeout)
                 } else if (n == 0) {
                         return (length - left);
                 } else {
-			perror("recv");
+                        perror("recv");
                         return -1;
                 }
         }
         return (length - left);
 }
 
-
-
-int send_all(int sock_fd, const char *buffer, int length, int timeout) {
+int send_all(int sock_fd, const char *buffer, int length, int timeout)
+{
     int left = length;      // 剩余需要发送的字节数
     const char *ptr = buffer; // 当前发送的位置指针
     struct timeval wait;
@@ -160,12 +162,11 @@ int send_all(int sock_fd, const char *buffer, int length, int timeout) {
 
 
 // 子进程业务逻辑：处理 HTTP 请求
-void handle_http_request(int conn_fd) {
+void handle_http_request(int conn_fd)
+{
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     int len = recv_line(conn_fd, buf, sizeof(buf), 60);
-    // int len = recv(conn_fd, buf, sizeof(buf), 0);
-
 
     char method[16], url[256], protocol[16];
     bzero(method, sizeof(method));
@@ -181,20 +182,23 @@ void handle_http_request(int conn_fd) {
 
     if (strcmp(method, "GET") == 0) {
         char real_path[512];
-	str2lower(url);
+        FILE *fp;
 
+        str2lower(url);
         len = snprintf(real_path, sizeof(real_path), "%s%s", web_root, url);
         log_msg("Child process %d is looking for: [%s]\n", getpid(), real_path);
         if (real_path[strlen(real_path) - 1] == '/' &&
 	    sizeof(real_path) - len > 11)
 		strcat(real_path, "index.html");
 
-        FILE *fp = fopen(real_path, "rb");
+        fp = fopen(real_path, "rb");
         if (fp) {
-            // 发送 200 OK
-            send(conn_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0);
             char file_buf[4096];
             size_t n;
+
+            // 发送 200 OK
+            send(conn_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0);
+
             while ((n = fread(file_buf, 1, sizeof(file_buf), fp)) > 0) {
                 if (send_all(conn_fd, file_buf,n, 30) < 0){ //30秒超时
                     perror("send_all failed");
@@ -202,6 +206,7 @@ void handle_http_request(int conn_fd) {
                 }
             }
             fclose(fp);
+
         } else {
             // 发送 404
             char *not_found = "HTTP/1.1 404 NOT FOUND\r\n\r\nFile Not Found";
@@ -218,6 +223,9 @@ int main(int argc, char **argv)
 {
     int listen_fd;
     struct sockaddr_in serv_addr, cli_addr;
+    fd_set read_fds;
+    int res;
+    int opt = 1;
     
     struct option opts[] = {
 	{"daemon", 0, 0, 'd'},
@@ -229,38 +237,37 @@ int main(int argc, char **argv)
 
     while ((opt_c = getopt_long(argc, argv, "dr:p:", opts, NULL)) >= 0) {
         switch (opt_c) { 
-	case 'd':
-	    is_daemon = 1;
-	    break;
-	case 'r':
-	    snprintf(web_root, sizeof(web_root), "%s", optarg);
-	    if (dir_exist(web_root) != 1) {
-		    printf("web_root does not exist\n)");
-		    exit(-1);
+        case 'd':
+            is_daemon = 1;
+            break;
+        case 'r':
+            snprintf(web_root, sizeof(web_root), "%s", optarg);
+            if (!dir_exist(web_root)) {
+                fprintf(stderr, "Web dir %s does not exist\n", web_root);
+                exit(-1);
+            }
+            break;
+        case 'p':
+            port = atoi(optarg);
+            break;
+        default:
+            //usage();
+            break;
 	    }
-	    break;
-	case 'p':
-	    port = atoi(optarg);
-	    break;
-	default:
-	    //usage();
-	    break;
-	}
     }
 
     // 1. 初始化 Socket
     if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-	perror("socket");
+        perror("socket");
         exit(-1);
     }
-    int opt = 1;
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // 防止端口占用
 
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(port);
     if (bind(listen_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-	perror("bind");
+        perror("bind");
         exit(-1);
     }
 
@@ -273,9 +280,6 @@ int main(int argc, char **argv)
     printf("Web Server started on port %d, root %s...\n", port, web_root);
 
     if (is_daemon) daemon(0, 0);
-
-    fd_set read_fds;
-    int res;
 
     while (1) {
 
@@ -296,21 +300,22 @@ int main(int argc, char **argv)
         // 3. 使用 select 监视状态
         if ((res = select(listen_fd + 1, &read_fds, NULL, NULL, NULL)) < 0) {
             if (errno == EINTR) continue; // 忽略信号中断
-	    perror("main select");
+            perror("main select");
             exit(-1);
         }
 
         if (res > 0 && FD_ISSET(listen_fd, &read_fds)) {
             int namelen = sizeof(cli_addr);
-            int conn_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, &namelen);
+            int conn_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, (socklen_t *) &namelen);
+            pid_t pid;
+
             if (conn_fd < 0) {
                 perror("accept");
                 exit(-1);
             }
-	    log_msg("accept from %s : %u\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+            log_msg("accept from %s : %u\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
 
             // 4. fork 子进程处理
-            pid_t pid;
 
             if ((pid = fork()) == 0) {
                 close(listen_fd);
@@ -324,8 +329,8 @@ int main(int argc, char **argv)
                        child_num);
                 close(conn_fd); // 父进程关闭引用
             } else {
-		perror("fork");
-		exit(-1);
+                perror("fork");
+                exit(-1);
             }
         }
     }
