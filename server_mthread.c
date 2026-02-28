@@ -27,7 +27,8 @@ int child_num = 0;
 #define MAX_CHILD 256
 int port = 80;
 
-void str2lower(char *str) {
+void str2lower(char *str) 
+{
     if (str == NULL) return;
     for (char *p = str; *p; p++) {
         *p = tolower((unsigned char)*p);
@@ -35,12 +36,13 @@ void str2lower(char *str) {
 }
 
 
-int dir_exist(const char* path) {
+int dir_exist(const char* path) 
+{
     struct stat st;
-    if (stat(path, &st) == 0) {
-	if(S_ISDIR(st.st_mode)) return 1;
-    }
-    return -1;
+    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) 
+        return 1;
+    else
+        return -1;
 }
 
 
@@ -51,7 +53,8 @@ void log_msg(const char *fmt, ...)
 
     if (is_daemon) {
         vsyslog(LOG_INFO, fmt, ap);
-    } else {
+    } 
+    else {
         vfprintf(stdout, fmt, ap);
         fflush(stdout);          // 防止 fork/重定向时缓冲问题
     }
@@ -59,22 +62,25 @@ void log_msg(const char *fmt, ...)
     va_end(ap);
 }
 
-void wait_child() {
+void wait_child() 
+{
     pid_t pid = 0;
     while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
         --child_num;
         log_msg("child %d exit, num %d\n", pid, child_num);
     }
     if (pid < 0)
-	log_msg("waitpid: %s", strerror(errno));
+	    log_msg("waitpid: %s", strerror(errno));
 }
 
 // 信号处理函数：异步回收子进程资源
-void sigchld_handler(int sig) {
+void sigchld_handler(int sig) 
+{
     sig_pending = 1;
 }
 
-void sigterm_handler(int sig) {
+void sigterm_handler(int sig) 
+{
     log_msg("Received SIGTERM. Server %d is shutting down\n", getpid());
     exit(0);
 }
@@ -164,9 +170,7 @@ void handle_http_request(int conn_fd) {
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     int len = recv_line(conn_fd, buf, sizeof(buf), 60);
-    // int len = recv(conn_fd, buf, sizeof(buf), 0);
-
-
+    
     char method[16], url[256], protocol[16];
     bzero(method, sizeof(method));
     bzero(url, sizeof(url));
@@ -181,7 +185,7 @@ void handle_http_request(int conn_fd) {
 
     if (strcmp(method, "GET") == 0) {
         char real_path[512];
-	str2lower(url);
+	    str2lower(url);
 
         len = snprintf(real_path, sizeof(real_path), "%s%s", web_root, url);
         log_msg("Child process %d is looking for: [%s]\n", getpid(), real_path);
@@ -189,7 +193,8 @@ void handle_http_request(int conn_fd) {
 	    sizeof(real_path) - len > 11)
 		strcat(real_path, "index.html");
 
-        FILE *fp = fopen(real_path, "rb");
+        FILE *fp;
+        fp = fopen(real_path, "rb");
         if (fp) {
             // 发送 200 OK
             send(conn_fd, "HTTP/1.1 200 OK\r\n\r\n", 19, 0);
@@ -229,28 +234,28 @@ int main(int argc, char **argv)
 
     while ((opt_c = getopt_long(argc, argv, "dr:p:", opts, NULL)) >= 0) {
         switch (opt_c) { 
-	case 'd':
-	    is_daemon = 1;
-	    break;
-	case 'r':
-	    snprintf(web_root, sizeof(web_root), "%s", optarg);
-	    if (dir_exist(web_root) != 1) {
-		    printf("web_root does not exist\n)");
-		    exit(-1);
+	    case 'd':
+	        is_daemon = 1;
+	        break;
+	    case 'r':
+	        snprintf(web_root, sizeof(web_root), "%s", optarg);
+	        if (dir_exist(web_root) != 1) {
+		        printf("web_root does not exist\n)");
+		        exit(-1);
+	        }
+	        break;
+	    case 'p':
+	        port = atoi(optarg);
+	        break;
+    	default:
+	        //usage();
+	        break;
 	    }
-	    break;
-	case 'p':
-	    port = atoi(optarg);
-	    break;
-	default:
-	    //usage();
-	    break;
-	}
     }
 
     // 1. 初始化 Socket
     if ((listen_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-	perror("socket");
+	    perror("socket");
         exit(-1);
     }
     int opt = 1;
@@ -260,7 +265,7 @@ int main(int argc, char **argv)
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(port);
     if (bind(listen_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-	perror("bind");
+	    perror("bind");
         exit(-1);
     }
 
@@ -296,18 +301,18 @@ int main(int argc, char **argv)
         // 3. 使用 select 监视状态
         if ((res = select(listen_fd + 1, &read_fds, NULL, NULL, NULL)) < 0) {
             if (errno == EINTR) continue; // 忽略信号中断
-	    perror("main select");
+	        perror("main select");
             exit(-1);
         }
 
         if (res > 0 && FD_ISSET(listen_fd, &read_fds)) {
             int namelen = sizeof(cli_addr);
-            int conn_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, &namelen);
+            int conn_fd = accept(listen_fd, (struct sockaddr *) &cli_addr, (socklen_t *) &namelen);
             if (conn_fd < 0) {
                 perror("accept");
                 exit(-1);
             }
-	    log_msg("accept from %s : %u\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
+	        log_msg("accept from %s : %u\n", inet_ntoa(cli_addr.sin_addr), ntohs(cli_addr.sin_port));
 
             // 4. fork 子进程处理
             pid_t pid;
@@ -318,14 +323,16 @@ int main(int argc, char **argv)
                 close(conn_fd);
                 //printf("child %d finished\n", getpid());
                 exit(0); // 子进程必须退出
-            } else if (pid > 0)  {
+            }
+            else if (pid > 0)  {
                 ++child_num;
                 log_msg("child %d started, num %d\n", pid,
                        child_num);
                 close(conn_fd); // 父进程关闭引用
-            } else {
-		perror("fork");
-		exit(-1);
+            }
+            else {
+		        perror("fork");
+		        exit(-1);
             }
         }
     }
