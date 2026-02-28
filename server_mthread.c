@@ -10,7 +10,6 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
-
 #include <stdarg.h>
 #include <getopt.h>
 #include <syslog.h>
@@ -35,7 +34,6 @@ void str2lower(char *str)
     }
 }
 
-
 int dir_exist(const char* path) 
 {
     struct stat st;
@@ -44,7 +42,6 @@ int dir_exist(const char* path)
     else
         return -1;
 }
-
 
 void log_msg(const char *fmt, ...)
 {
@@ -105,7 +102,7 @@ int recv_line(int sock_fd, char *buffer, int length, int timeout)
                 res = select(sock_fd + 1, &fds, NULL, NULL, &wait);
                 if (res < 0) {
                         if (errno == EINTR) continue;
-			perror("recv_line select");
+			            perror("recv_line select");
                         return -1;
                 } else if (res == 0) {
                         return (length - left);
@@ -119,16 +116,15 @@ int recv_line(int sock_fd, char *buffer, int length, int timeout)
                 } else if (n == 0) {
                         return (length - left);
                 } else {
-			perror("recv");
+			            perror("recv");
                         return -1;
                 }
         }
         return (length - left);
 }
 
-
-
-int send_all(int sock_fd, const char *buffer, int length, int timeout) {
+int send_all(int sock_fd, const char *buffer, int length, int timeout) 
+{
     int left = length;      // 剩余需要发送的字节数
     const char *ptr = buffer; // 当前发送的位置指针
     struct timeval wait;
@@ -164,9 +160,9 @@ int send_all(int sock_fd, const char *buffer, int length, int timeout) {
     return length; // 全部发送成功
 }
 
-
 // 子进程业务逻辑：处理 HTTP 请求
-void handle_http_request(int conn_fd) {
+void handle_http_request(int conn_fd) 
+{
     char buf[1024];
     memset(buf, 0, sizeof(buf));
     int len = recv_line(conn_fd, buf, sizeof(buf), 60);
@@ -260,7 +256,6 @@ int main(int argc, char **argv)
     }
     int opt = 1;
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // 防止端口占用
-
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(port);
@@ -323,14 +318,12 @@ int main(int argc, char **argv)
                 close(conn_fd);
                 //printf("child %d finished\n", getpid());
                 exit(0); // 子进程必须退出
-            }
-            else if (pid > 0)  {
+            } else if (pid > 0)  {
                 ++child_num;
                 log_msg("child %d started, num %d\n", pid,
                        child_num);
                 close(conn_fd); // 父进程关闭引用
-            }
-            else {
+            } else {
 		        perror("fork");
 		        exit(-1);
             }
