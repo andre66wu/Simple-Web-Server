@@ -50,8 +50,7 @@ void log_msg(const char *fmt, ...)
 
     if (is_daemon) {
         vsyslog(LOG_INFO, fmt, ap);
-    } 
-    else {
+    } else {
         vfprintf(stdout, fmt, ap);
         fflush(stdout);          // 防止 fork/重定向时缓冲问题
     }
